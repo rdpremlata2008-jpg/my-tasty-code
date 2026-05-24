@@ -1,0 +1,169 @@
+import streamlit as st
+import serial
+import time
+import psutil
+
+# ---------------- PAGE ----------------
+st.set_page_config(page_title="🤖 Smart AI System")
+st.title("🤖 JARVIS SMART CONTROL PANEL")
+
+# ---------------- ARDUINO CONNECT ----------------
+if "arduino" not in st.session_state:
+    try:
+        st.session_state.arduino = serial.Serial('COM3', 9600)
+        time.sleep(2)
+        st.success("✅ Arduino Connected")
+    except:
+        st.session_state.arduino = None
+        st.error("❌ Arduino Not Connected")
+
+arduino = st.session_state.arduino
+
+# ---------------- SEND FUNCTION ----------------
+def send(cmd):
+    try:
+        if arduino:
+            arduino.write((cmd + "\n").encode())
+    except:
+        pass
+
+# ---------------- HISTORY ----------------
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+def log(cmd):
+    st.session_state.history.append(cmd)
+
+# ---------------- RAM ----------------
+st.subheader("💻 RAM Usage")
+ram = psutil.virtual_memory().percent
+st.progress(int(ram))
+st.write(f"{ram}% used")
+
+# ---------------- DISTANCE ----------------
+st.subheader("📏 Distance Sensor")
+
+distance = None
+
+if arduino and arduino.in_waiting:
+    try:
+        data = arduino.readline().decode().strip()
+        if data.startswith("DIST:"):
+            distance = int(data.replace("DIST:", ""))
+    except:
+        pass
+
+if distance is not None:
+    st.metric("Distance", distance)
+
+    if distance < 10:
+        st.error("🚨 DANGER!")
+    elif distance < 20:
+        st.warning("⚠️ Too Close")
+    else:
+        st.success("Safe 👍")
+
+# ---------------- AUTO MODE ----------------
+    st.subheader("🤖 Auto Mode")
+
+auto = st.toggle("Enable Auto Mode")
+
+if auto and distance:
+        if distance < 15:
+            send("BLINK ON")
+            log("AUTO BLINK ON")
+            st.warning("Auto: BLINK ON")
+
+        elif distance > 30:
+         send("LED OFF")
+        log("AUTO LED OFF")
+        st.info("Auto: LED OFF")
+
+# ---------------- LED CONTROL ----------------
+st.subheader("💡 LED Control")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("LED ON"):
+        send("LED ON")
+        log("LED ON")
+
+    if st.button("BLINK ON"):
+        send("BLINK ON")
+        log("BLINK ON")
+
+with col2:
+    if st.button("LED OFF"):
+        send("LED OFF")
+        log("LED OFF")
+
+    if st.button("BLINK OFF"):
+        send("BLINK OFF")
+        log("BLINK OFF")
+
+# ---------------- SERVO ----------------
+st.subheader("⚙️ Servo Control")
+
+angle = st.slider("Servo Angle", 0, 180, 90)
+
+if st.button("MOVE SERVO"):
+    send(f"SERVO {angle}")
+    log(f"SERVO {angle}")
+
+# ---------------- CHAT (NO VOICE) ----------------
+st.subheader("💬 AI Chat Control")
+
+user = st.text_input("Type command")
+
+if st.button("SEND"):
+    msg = user.lower()
+
+    if "led on" in msg:
+        send("LED ON")
+        reply = "💡 LED ON"
+
+    elif "led off" in msg:
+        send("LED OFF")
+        reply = "🌑 LED OFF"
+
+    elif "blink" in msg:
+        send("BLINK ON")
+        reply = "✨ BLINKING"
+
+    elif "servo" in msg:
+        try:
+            ang = int(msg.split()[-1])
+            send(f"SERVO {ang}")
+            reply = f"⚙️ SERVO {ang}"
+        except:
+            reply = "⚠️ Use servo 90"
+
+    elif "distance" in msg:
+        reply = f"📏 Distance = {distance}"
+
+    elif "ram" in msg:
+        reply = f"💻 RAM = {ram}%"
+
+    else:
+        reply = "🤖 Commands: LED, BLINK, SERVO, DISTANCE, RAM"
+
+    st.session_state.history.append("🧑 " + user)
+    st.session_state.history.append("🤖 " + reply)
+
+    st.write(reply)
+
+# ---------------- ANALYTICS ----------------
+st.subheader("📊 Analytics")
+
+if st.session_state.history:
+    st.write("Total Commands:", len(st.session_state.history))
+    most = max(set(st.session_state.history), key=st.session_state.history.count)
+    st.write("Most Used:", most)
+
+# ---------------- HISTORY ----------------
+st.subheader("🧾 History")
+
+for h in st.session_state.history[-10:]:
+    st.write(h)
+time.sleep(1) 
